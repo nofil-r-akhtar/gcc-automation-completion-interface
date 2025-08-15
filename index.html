@@ -61,43 +61,55 @@
     <div id="response" class="response" style="display:none;"></div>
 
     <script>
-        document.getElementById("uploadForm").addEventListener("submit", async function(e) {
-            e.preventDefault();
+document.getElementById("uploadForm").addEventListener("submit", async function(e) {
+    e.preventDefault();
 
-            const formData = new FormData();
-            formData.append("zip_file", this.zip_file.files[0]);
-            formData.append("extract_to", "Extracted File"); 
-            formData.append("completed_filter", this.completed_filter.value);
+    const formData = new FormData();
+    formData.append("zip_file", this.zip_file.files[0]);
+    formData.append("completed_filter", this.completed_filter.value);
 
-            try {
-                const res = await fetch("https://web-production-0e50.up.railway.app/clean-automated-csv", {
-                    method: "POST",
-                    body: formData
-                });
-
-                if (!res.ok) {
-                    const errorText = await res.text();
-                    alert("Error: " + errorText);
-                    return;
-                }
-
-                // Get CSV as blob
-                const blob = await res.blob();
-                const url = window.URL.createObjectURL(blob);
-
-                // Create download link and click it
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `cleaned_${this.completed_filter.value}.csv`;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-
-            } catch (err) {
-                alert("Error: " + err.message);
-            }
+    try {
+        const res = await fetch("https://web-production-0e50.up.railway.app/clean-automated-csv", {
+            method: "POST",
+            body: formData
         });
-    </script>
+
+        const data = await res.json();
+        const respDiv = document.getElementById("response");
+        respDiv.style.display = "block";
+
+        if (!res.ok || data.error) {
+            respDiv.style.background = "#ffe6e6";
+            respDiv.textContent = data.error || "Unknown error";
+            return;
+        }
+
+        // Show stats
+        let statsHTML = `<p><b>Total Completed:</b> ${data.rows_after_cleaning}</p>`;
+        if (data.male_completed !== null && data.female_completed !== null) {
+            statsHTML += `<p><b>Male Completed:</b> ${data.male_completed}</p>`;
+            statsHTML += `<p><b>Female Completed:</b> ${data.female_completed}</p>`;
+        }
+        respDiv.style.background = "#e6ffe6";
+        respDiv.innerHTML = statsHTML;
+
+        // Trigger file download
+        const csvBlob = new Blob([atob(data.file_data)], { type: "text/csv" });
+        const url = URL.createObjectURL(csvBlob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = data.file_name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+
+    } catch (err) {
+        alert("Error: " + err.message);
+    }
+});
+</script>
+
 
 
 </body>
