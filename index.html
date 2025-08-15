@@ -7,103 +7,110 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            max-width: 600px;
-            margin: 30px auto;
-            padding: 20px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            background-color: #f9f9f9;
+            margin: 20px;
         }
-        input, select, button {
-            width: 100%;
+        form {
+            margin-bottom: 20px;
             padding: 10px;
-            margin: 8px 0;
-            font-size: 16px;
+            border: 1px solid #ddd;
         }
-        button {
-            background-color: #4CAF50;
-            border: none;
-            color: white;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #45a049;
-        }
-        .response {
+        #response {
             margin-top: 20px;
             padding: 10px;
-            border-radius: 6px;
-            background: #eef;
-            font-family: monospace;
+            border: 1px solid #ddd;
+            background: #f9f9f9;
+        }
+        button {
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            padding: 8px 14px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        button:hover {
+            background-color: #0056b3;
         }
     </style>
 </head>
 <body>
 
-    <h2>Upload Zip & Clean CSV</h2>
-    
-    <form id="uploadForm">
-        <label>Zip File:</label>
-        <input type="file" name="zip_file" accept=".zip" required>
+<h2>Upload CSV for Cleaning</h2>
 
-        <label>Extract To (folder path):</label>
-        <input type="text" name="extract_to" value="Extracted File" disabled>
+<form id="uploadForm">
+    <label>Select CSV File:</label><br>
+    <input type="file" name="file" accept=".csv" required><br><br>
 
-        <label>Completed Filter:</label>
-        <select name="completed_filter" id="completed_filter">
-            <option value="yes">Yes (Completed only)</option>
-            <option value="no">No (Not completed only)</option>
-        </select>
+    <label>Completed Filter:</label>
+    <select name="completed_filter">
+        <option value="all">All</option>
+        <option value="yes">Yes Only</option>
+        <option value="no">No Only</option>
+    </select><br><br>
 
-        <button type="submit">Upload & Process</button>
-    </form>
+    <button type="submit">Upload & Process</button>
+</form>
 
-    <div id="response" class="response" style="display:none;"></div>
+<div id="response"></div>
 
-    <script>
-        document.getElementById("uploadForm").addEventListener("submit", async function(e) {
-            e.preventDefault();
+<script>
+    const API_BASE = "https://web-production-0e50.up.railway.app/clean-automated-csv"; // change to your Flask API base URL
 
-            const formData = new FormData();
-            formData.append("zip_file", this.zip_file.files[0]);
-            formData.append("extract_to", "Extracted File"); // fixed value
-            formData.append("completed_filter", this.completed_filter.value);
+    document.getElementById("uploadForm").addEventListener("submit", async function (e) {
+        e.preventDefault();
 
-            try {
-                const res = await fetch("https://web-production-0e50.up.railway.app/clean-automated-csv", {
-                    method: "POST",
-                    body: formData
-                });
+        const formData = new FormData(this);
+        const respDiv = document.getElementById("response");
+        respDiv.innerHTML = "Processing... Please wait.";
 
-                const data = await res.json();
-                const respDiv = document.getElementById("response");
-                respDiv.style.display = "block";
+        try {
+            const response = await fetch(`${API_BASE}/process`, {
+                method: "POST",
+                body: formData
+            });
 
-                if (res.ok) {
-                    respDiv.style.background = "#e6ffe6";
-
-                    let extraInfo = "";
-                    if (formData.get("completed_filter") === "yes") {
-                        extraInfo = `
-                            <p><b>Total Completed:</b> ${data.rows_after_cleaning}</p>
-                            <p><b>Male Completed:</b> ${data.male_completed}</p>
-                            <p><b>Female Completed:</b> ${data.female_completed}</p>
-                        `;
-                    }
-
-                    respDiv.innerHTML = `
-                        ${extraInfo}
-                        <a href="${data.download_url}" target="_blank" download>Download Cleaned CSV</a>
-                    `;
-                } else {
-                    respDiv.style.background = "#ffe6e6";
-                    respDiv.textContent = JSON.stringify(data, null, 2);
-                }
-            } catch (err) {
-                alert("Error: " + err.message);
+            if (!response.ok) {
+                throw new Error("Upload failed. Server returned " + response.status);
             }
-        });
-    </script>
+
+            const data = await response.json();
+            console.log("Server response:", data);
+
+            let extraInfo = "";
+            if (data.male_count !== undefined && data.female_count !== undefined) {
+                extraInfo = `<p>Male Count: ${data.male_count}</p>
+                             <p>Female Count: ${data.female_count}</p>`;
+            }
+
+            respDiv.innerHTML = `
+                <p>${data.message || "File processed successfully!"}</p>
+                ${extraInfo}
+                <button id="downloadBtn">Download Cleaned CSV</button>
+            `;
+
+            document.getElementById("downloadBtn").addEventListener("click", async () => {
+                try {
+                    const fileRes = await fetch(`${API_BASE}${data.download_url}`);
+                    if (!fileRes.ok) throw new Error("Failed to fetch file");
+                    const blob = await fileRes.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = "cleaned.csv";
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(url);
+                } catch (err) {
+                    alert("Download failed: " + err.message);
+                }
+            });
+
+        } catch (err) {
+            respDiv.innerHTML = `<p style="color:red;">Error: ${err.message}</p>`;
+        }
+    });
+</script>
 
 </body>
 </html>
